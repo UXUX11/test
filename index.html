@@ -157,6 +157,29 @@
 .continuous-draw-open:disabled,.continuous-draw-next:disabled{opacity:.45;cursor:not-allowed}
 @media(max-width:520px){.continuous-draw-panel{margin-left:2px;margin-right:2px;padding:14px}.continuous-draw-product{font-size:19px}.continuous-draw-scope{padding:7px 11px;font-size:13px}}
 
+
+/* ===== 快速抽選同步已抽狀態 V7 ===== */
+.draw-item.quick-drawn {
+    opacity: 0.45;
+    filter: grayscale(0.8);
+}
+.draw-item.quick-drawn .draw-product {
+    color: #888 !important;
+}
+.draw-item.quick-drawn .draw-link {
+    background: #e8e8e8 !important;
+    color: #888 !important;
+    border-color: #d0d0d0 !important;
+}
+.draw-item.quick-drawn::after {
+    content: "✓ 已抽";
+    float: right;
+    margin: 6px 8px 0 0;
+    color: #888;
+    font-size: 12px;
+    font-weight: 700;
+}
+
 </style>
 </head>
 <body>
@@ -263,7 +286,7 @@
 <div class="continuous-draw-store" id="continuousDrawStore"></div>
 <div class="continuous-draw-product" id="continuousDrawProduct">載入中...</div>
 <button class="continuous-draw-open" id="continuousDrawOpen" type="button" disabled>🔗 開啟抽選</button>
-<button class="continuous-draw-next" id="continuousDrawNext" type="button" disabled>✅ 已完成／下一個</button>
+<button class="continuous-draw-next" id="continuousDrawNext" type="button" disabled>✅ 完成並開啟下一個</button>
 <button class="continuous-draw-reset" id="continuousDrawReset" type="button">重設目前範圍的進度</button>
 </div>
 
@@ -430,12 +453,15 @@
 
 
 
+
+
 <script>
-/* ===== Funbox 連續抽選模式 V5 ===== */
+/* ===== Funbox 連續抽選模式 V7：記憶進度 + 同步原清單 ===== */
 (function () {
     "use strict";
 
-    var KEY = "funbox_continuous_draw_v5";
+    var PROGRESS_KEY = "funbox_continuous_draw_v7_progress";
+    var DRAWN_KEY = "funbox_continuous_draw_v7_drawn";
     var items = [];
     var scope = "全部";
     var index = 0;
@@ -464,33 +490,88 @@
                     city: city,
                     store: storeName,
                     product: productEl.textContent.trim(),
-                    url: url
+                    url: url,
+                    element: item
                 });
             });
         });
+
         return result;
     }
 
-    function loadMap() {
-        try { return JSON.parse(localStorage.getItem(KEY) || "{}"); }
-        catch (e) { return {}; }
+    function readJson(key) {
+        try {
+            return JSON.parse(localStorage.getItem(key) || "{}");
+        } catch (e) {
+            return {};
+        }
     }
 
-    function getIndex(name) {
-        var map = loadMap();
-        var n = parseInt(map[name], 10);
+    function writeJson(key, value) {
+        try {
+            localStorage.setItem(key, JSON.stringify(value));
+        } catch (e) {}
+    }
+
+    // 每個範圍各自記住「下一個要抽的位置」。
+    function getProgress(scopeName) {
+        var map = readJson(PROGRESS_KEY);
+        var n = parseInt(map[scopeName], 10);
         return isNaN(n) || n < 0 ? 0 : n;
     }
 
-    function saveIndex() {
-        var map = loadMap();
+    function saveProgress() {
+        var map = readJson(PROGRESS_KEY);
         map[scope] = index;
-        try { localStorage.setItem(KEY, JSON.stringify(map)); } catch (e) {}
+        writeJson(PROGRESS_KEY, map);
+    }
+
+    // 已抽是以「實際 URL」作為唯一識別，不用商品名稱。
+    function getDrawn() {
+        return readJson(DRAWN_KEY);
+    }
+
+    function markDrawn(url) {
+        var drawn = getDrawn();
+        drawn[url] = true;
+        writeJson(DRAWN_KEY, drawn);
+    }
+
+    function isDrawn(url) {
+        return !!getDrawn()[url];
+    }
+
+    function syncOriginalList() {
+        var drawn = getDrawn();
+
+        items.forEach(function (item) {
+            if (!item.element) return;
+
+            if (drawn[item.url]) {
+                item.element.classList.add("quick-drawn");
+
+                var link = item.element.querySelector(".draw-link");
+                if (link) {
+                    link.setAttribute("data-quick-drawn", "1");
+                    link.title = "已透過快速抽選完成";
+                }
+            } else {
+                item.element.classList.remove("quick-drawn");
+
+                var link = item.element.querySelector(".draw-link");
+                if (link) {
+                    link.removeAttribute("data-quick-drawn");
+                    link.title = "";
+                }
+            }
+        });
     }
 
     function filtered() {
         if (scope === "全部") return items;
-        return items.filter(function (x) { return x.city === scope; });
+        return items.filter(function (x) {
+            return x.city === scope;
+        });
     }
 
     function renderScopes() {
@@ -499,38 +580,50 @@
 
         var names = ["全部"];
         items.forEach(function (x) {
-            if (names.indexOf(x.city) === -1) names.push(x.city);
+            if (names.indexOf(x.city) === -1) {
+                names.push(x.city);
+            }
         });
 
         box.innerHTML = "";
+
         names.forEach(function (name) {
             var count = name === "全部"
                 ? items.length
-                : items.filter(function (x) { return x.city === name; }).length;
+                : items.filter(function (x) {
+                    return x.city === name;
+                }).length;
 
-            var b = document.createElement("button");
-            b.type = "button";
-            b.className = "continuous-draw-scope" + (name === scope ? " active" : "");
-            b.textContent = name + " (" + count + ")";
-            b.onclick = function () {
+            var btn = document.createElement("button");
+            btn.type = "button";
+            btn.className =
+                "continuous-draw-scope" +
+                (name === scope ? " active" : "");
+            btn.textContent = name + " (" + count + ")";
+
+            btn.onclick = function () {
                 scope = name;
-                index = getIndex(scope);
+                index = getProgress(scope);
                 renderScopes();
                 render();
             };
-            box.appendChild(b);
+
+            box.appendChild(btn);
         });
     }
 
     function render() {
         var list = filtered();
+
         var progress = $id("continuousDrawProgress");
         var store = $id("continuousDrawStore");
         var product = $id("continuousDrawProduct");
         var open = $id("continuousDrawOpen");
         var next = $id("continuousDrawNext");
 
-        if (!progress || !store || !product || !open || !next) return;
+        if (!progress || !store || !product || !open || !next) {
+            return;
+        }
 
         if (!list.length) {
             progress.textContent = "目前沒有可用的抽選連結";
@@ -544,51 +637,103 @@
         if (index >= list.length) {
             progress.textContent = "🎉 " + scope + " 已全部完成！";
             store.textContent = "";
-            product.textContent = "共 " + list.length + " 個不重複抽選連結";
+            product.textContent =
+                "共 " + list.length + " 個不重複抽選連結";
             open.disabled = true;
             next.disabled = true;
             return;
         }
 
         var item = list[index];
-        progress.textContent = (index + 1) + " / " + list.length + "　（" + scope + "）";
+
+        progress.textContent =
+            (index + 1) + " / " + list.length + "　（" + scope + "）";
         store.textContent = item.store;
         product.textContent = item.product;
+
         open.disabled = false;
         next.disabled = false;
         open.setAttribute("data-url", item.url);
-        saveIndex();
+
+        saveProgress();
+    }
+
+    function openCurrent() {
+        var url = $id("continuousDrawOpen").getAttribute("data-url");
+        if (url) {
+            window.open(url, "_blank");
+        }
+    }
+
+    /*
+     * 按「完成並開啟下一個」：
+     * 1. 把目前 URL 記成已抽
+     * 2. 原本下面的清單立即反灰
+     * 3. 快速抽進度 +1
+     * 4. 直接開下一個 LINE
+     */
+    function completeAndOpenNext() {
+        var list = filtered();
+
+        if (index >= list.length) {
+            render();
+            return;
+        }
+
+        var current = list[index];
+
+        // 以 URL 記錄，不以商品名稱記錄。
+        markDrawn(current.url);
+
+        // 同步原本 77 家下面的清單。
+        syncOriginalList();
+
+        index++;
+        saveProgress();
+
+        if (index >= list.length) {
+            render();
+            return;
+        }
+
+        var nextItem = list[index];
+
+        render();
+
+        // 在使用者點擊事件內直接開下一個，降低手機瀏覽器擋新分頁的機率。
+        window.open(nextItem.url, "_blank");
+    }
+
+    function resetCurrentScope() {
+        if (!confirm(
+            "確定要重設「" + scope +
+            "」的快速抽選進度嗎？\n\n" +
+            "注意：已抽紀錄不會被刪除。"
+        )) {
+            return;
+        }
+
+        index = 0;
+        saveProgress();
+        render();
     }
 
     function init() {
         items = collect();
-        index = getIndex(scope);
+
+        index = getProgress(scope);
+
+        // 頁面重新載入時，先同步之前已抽的 URL。
+        syncOriginalList();
+
         renderScopes();
         render();
 
-        $id("continuousDrawOpen").onclick = function () {
-            var url = this.getAttribute("data-url");
-            if (url) window.open(url, "_blank");
-        };
-
-        $id("continuousDrawNext").onclick = function () {
-            var list = filtered();
-            if (index < list.length) {
-                index++;
-                saveIndex();
-                render();
-            }
-        };
-
-        $id("continuousDrawReset").onclick = function () {
-            if (!confirm("確定要重設「" + scope + "」的抽選進度嗎？")) return;
-            index = 0;
-            saveIndex();
-            render();
-        };
+        $id("continuousDrawOpen").onclick = openCurrent;
+        $id("continuousDrawNext").onclick = completeAndOpenNext;
+        $id("continuousDrawReset").onclick = resetCurrentScope;
     }
 
-    // 等原本網站 DOM 載入完成後再抓資料。
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", init);
     } else {
@@ -596,6 +741,8 @@
     }
 })();
 </script>
+
+
 
 </body>
 </html>
