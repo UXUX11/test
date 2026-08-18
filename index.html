@@ -406,5 +406,180 @@
             restoreDrawVisited();
         };
     </script>
+
+<script>
+/* ===== Funbox 連續抽選模式 V3 ===== */
+(function () {
+    "use strict";
+
+    var STORAGE_KEY = "funbox_continuous_draw_v3";
+    var queue = [];
+    var currentIndex = 0;
+
+    function collectQueue() {
+        var result = [];
+        var seen = {};
+
+        var stores = document.querySelectorAll("#page-draws .draw-store");
+
+        stores.forEach(function (store) {
+            var storeNameEl = store.querySelector(".draw-store-name");
+            var startEl = store.querySelector(".draw-start");
+            var storeName = storeNameEl ? storeNameEl.textContent.trim() : "";
+            var start = startEl ? startEl.textContent.trim() : "";
+
+            store.querySelectorAll(".draw-item").forEach(function (item) {
+                var productEl = item.querySelector(".draw-product");
+                var linkEl = item.querySelector(".draw-link");
+
+                if (!productEl || !linkEl) return;
+
+                var url = linkEl.href;
+                if (!url || seen[url]) return;
+
+                seen[url] = true;
+
+                result.push({
+                    store: storeName,
+                    start: start,
+                    product: productEl.textContent.trim(),
+                    url: url
+                });
+            });
+        });
+
+        return result;
+    }
+
+    function getEl(id) {
+        return document.getElementById(id);
+    }
+
+    function saveProgress() {
+        try {
+            localStorage.setItem(STORAGE_KEY, String(currentIndex));
+        } catch (e) {}
+    }
+
+    function loadProgress() {
+        try {
+            var value = parseInt(localStorage.getItem(STORAGE_KEY), 10);
+            if (!isNaN(value) && value >= 0) {
+                currentIndex = value;
+            }
+        } catch (e) {
+            currentIndex = 0;
+        }
+    }
+
+    function render() {
+        var progress = getEl("continuousDrawProgress");
+        var store = getEl("continuousDrawStore");
+        var product = getEl("continuousDrawProduct");
+        var open = getEl("continuousDrawOpen");
+        var next = getEl("continuousDrawNext");
+        var skip = getEl("continuousDrawSkip");
+
+        if (!progress || !store || !product || !open || !next || !skip) {
+            return;
+        }
+
+        if (queue.length === 0) {
+            progress.textContent = "目前沒有可用的抽選連結";
+            store.textContent = "";
+            product.textContent = "請先確認抽選資料已載入";
+            open.disabled = true;
+            next.disabled = true;
+            skip.disabled = true;
+            return;
+        }
+
+        if (currentIndex >= queue.length) {
+            progress.textContent = "🎉 全部完成！";
+            store.textContent = "";
+            product.textContent = queue.length + " 個不重複抽選連結已處理完畢";
+            open.disabled = true;
+            next.disabled = true;
+            skip.disabled = true;
+            return;
+        }
+
+        var item = queue[currentIndex];
+
+        progress.textContent = (currentIndex + 1) + " / " + queue.length;
+        store.textContent = item.store;
+        product.textContent = item.product;
+
+        open.disabled = false;
+        next.disabled = false;
+        skip.disabled = false;
+        open.setAttribute("data-url", item.url);
+
+        saveProgress();
+    }
+
+    function nextItem() {
+        if (currentIndex < queue.length) {
+            currentIndex++;
+            render();
+            window.scrollTo(0, 0);
+        }
+    }
+
+    function openCurrent() {
+        var open = getEl("continuousDrawOpen");
+        if (!open) return;
+
+        var url = open.getAttribute("data-url");
+        if (!url) return;
+
+        // 不依賴 window.open 的第三個參數，手機瀏覽器相容性較好。
+        window.open(url, "_blank");
+    }
+
+    function resetProgress() {
+        if (!window.confirm("確定要把連續抽選進度重設到第 1 個嗎？")) {
+            return;
+        }
+
+        currentIndex = 0;
+
+        try {
+            localStorage.removeItem(STORAGE_KEY);
+        } catch (e) {}
+
+        render();
+        window.scrollTo(0, 0);
+    }
+
+    function init() {
+        queue = collectQueue();
+        loadProgress();
+
+        if (currentIndex > queue.length) {
+            currentIndex = 0;
+        }
+
+        render();
+
+        var open = getEl("continuousDrawOpen");
+        var next = getEl("continuousDrawNext");
+        var skip = getEl("continuousDrawSkip");
+        var reset = getEl("continuousDrawReset");
+
+        if (open) open.onclick = openCurrent;
+        if (next) next.onclick = nextItem;
+        if (skip) skip.onclick = nextItem;
+        if (reset) reset.onclick = resetProgress;
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", init);
+    } else {
+        init();
+    }
+})();
+</script>
+
 </body>
 </html>
