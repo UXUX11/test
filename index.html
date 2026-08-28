@@ -149,56 +149,12 @@
 @media(max-width:520px){.continuous-draw-panel{margin-left:2px;margin-right:2px;padding:14px}.continuous-draw-product{font-size:19px}.continuous-draw-scope{padding:7px 11px;font-size:13px}}
 
 
-/* ===== 快速抽選同步已抽狀態 V7 ===== */
-.draw-item.quick-drawn {
-    opacity: 0.45;
-    filter: grayscale(0.8);
-}
-.draw-item.quick-drawn .draw-product {
-    color: #888 !important;
-}
-.draw-item.quick-drawn .draw-link {
-    background: #e8e8e8 !important;
-    color: #888 !important;
-    border-color: #d0d0d0 !important;
-}
-.draw-item.quick-drawn::after {
-    content: "✓ 已抽";
-    float: right;
-    margin: 6px 8px 0 0;
-    color: #888;
-    font-size: 12px;
-    font-weight: 700;
-}
-
-
-/* V8：已抽狀態與抽獎按鈕整齊對齊 */
-.draw-item.quick-drawn {
-    display: grid !important;
-    grid-template-columns: minmax(0, 1fr) auto 72px;
-    align-items: center;
-    column-gap: 12px;
-    opacity: 0.48;
-    filter: grayscale(0.8);
-}
-.draw-item.quick-drawn .draw-product {
-    color: #888 !important;
-}
+/* ===== 連續抽選已完成狀態 ===== */
 .draw-item.quick-drawn .draw-link {
     background: #d9d9d9 !important;
     color: #999 !important;
     border-color: #d0d0d0 !important;
     text-align: center;
-}
-.draw-item.quick-drawn::after {
-    content: "✓ 已抽";
-    float: none;
-    margin: 0;
-    width: 72px;
-    text-align: center;
-    color: #999;
-    font-size: 12px;
-    font-weight: 700;
 }
 
 
@@ -423,16 +379,14 @@
         };
     </script>
 <script>
-/* ===== Funbox 連續抽選模式 V8：共用上方縣市按鈕 + 以店家為進度 ===== */
+/* ===== Funbox 連續抽選模式：依商品開始時間自動判斷 ===== */
 (function () {
     "use strict";
 
-    var PROGRESS_KEY = "funbox_continuous_draw_v9_progress";
     var DRAWN_KEY = "funbox_continuous_draw_v9_drawn";
     var stores = [];
     var currentCity = "all";
-    var storeIndex = 0;
-    var productIndex = 0;
+    var currentItem = null;
 
     function $id(id) { return document.getElementById(id); }
 
@@ -453,7 +407,8 @@
                 products.push({
                     product: productEl.textContent.trim(),
                     url: linkEl.href,
-                    element: itemEl
+                    element: itemEl,
+                    link: linkEl
                 });
             });
 
@@ -479,56 +434,71 @@
         try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
     }
 
-    function scopeKey() {
-        return currentCity === "all" ? "全部" : currentCity;
-    }
-
-    function loadProgress() {
-        var map = readJson(PROGRESS_KEY);
-        var p = map[scopeKey()];
-        if (!p) return { store: 0, product: 0 };
-
-        return {
-            store: parseInt(p.store, 10) >= 0 ? parseInt(p.store, 10) : 0,
-            product: parseInt(p.product, 10) >= 0 ? parseInt(p.product, 10) : 0
-        };
-    }
-
-    function saveProgress() {
-        var map = readJson(PROGRESS_KEY);
-        map[scopeKey()] = {
-            store: storeIndex,
-            product: productIndex
-        };
-        writeJson(PROGRESS_KEY, map);
-    }
-
     function drawnMap() {
         return readJson(DRAWN_KEY);
     }
 
-    function markDrawn(url) {
+    function markDrawn(product) {
         var map = drawnMap();
-        map[url] = true;
+        map[product.url] = true;
         writeJson(DRAWN_KEY, map);
+
+        if (product.link) {
+            product.link.classList.add("clicked");
+        }
+        product.element.classList.add("quick-drawn");
     }
 
-    function isDrawn(url) {
-        return !!drawnMap()[url];
+    function isDrawn(product) {
+        return !!drawnMap()[product.url];
     }
 
     function syncDrawnRows() {
         var map = drawnMap();
 
         stores.forEach(function (store) {
-            store.products.forEach(function (p) {
-                if (isDrawn(p.url)) {
-                    p.element.classList.add("quick-drawn");
+            store.products.forEach(function (product) {
+                if (map[product.url]) {
+                    product.element.classList.add("quick-drawn");
+                    product.link.classList.add("clicked");
                 } else {
-                    p.element.classList.remove("quick-drawn");
+                    product.element.classList.remove("quick-drawn");
                 }
             });
         });
+    }
+
+    // 支援商品名稱內的：
+    // （8/29 11:00才開始）
+    // （8/29 11:00開始）
+    // (8/29 11:00才開始)
+    function getProductStartTime(productText) {
+        var match = productText.match(
+            /[（(]\s*(\d{1,2})\s*\/\s*(\d{1,2})\s+([01]?\d|2[0-3]):([0-5]\d)\s*(?:才)?開始\s*[）)]/
+        );
+
+        if (!match) return null;
+
+        var now = new Date();
+        var year = now.getFullYear();
+        var month = parseInt(match[1], 10);
+        var day = parseInt(match[2], 10);
+        var hour = parseInt(match[3], 10);
+        var minute = parseInt(match[4], 10);
+
+        var start = new Date(year, month - 1, day, hour, minute, 0, 0);
+
+        // 跨年情況：例如目前 12 月、文字寫 1/2。
+        if (start.getTime() < now.getTime() && month < (now.getMonth() + 1) - 6) {
+            start.setFullYear(year + 1);
+        }
+
+        return start;
+    }
+
+    function hasStarted(product) {
+        var start = getProductStartTime(product.product);
+        return !start || new Date() >= start;
     }
 
     function filteredStores() {
@@ -538,8 +508,34 @@
         });
     }
 
-    function render() {
+    // 從目前縣市中，找「尚未抽 + 已經開始」的第一個商品。
+    // 因為未開始的商品不會被寫進已抽紀錄，
+    // 所以明天時間到了之後重新整理，就會自動重新出現在連續抽選流程中。
+    function findNextItem() {
         var list = filteredStores();
+
+        for (var s = 0; s < list.length; s++) {
+            var store = list[s];
+
+            for (var p = 0; p < store.products.length; p++) {
+                var product = store.products[p];
+
+                if (isDrawn(product)) continue;
+                if (!hasStarted(product)) continue;
+
+                return {
+                    store: store,
+                    product: product,
+                    storeIndex: s,
+                    productIndex: p
+                };
+            }
+        }
+
+        return null;
+    }
+
+    function render() {
         var progress = $id("continuousDrawProgress");
         var storeEl = $id("continuousDrawStore");
         var productEl = $id("continuousDrawProduct");
@@ -547,6 +543,10 @@
         var next = $id("continuousDrawNext");
 
         if (!progress || !storeEl || !productEl || !open || !next) return;
+
+        var list = filteredStores();
+        var candidate = findNextItem();
+        currentItem = candidate;
 
         if (!list.length) {
             progress.textContent = "目前沒有可用的抽選資料";
@@ -557,100 +557,71 @@
             return;
         }
 
-        if (storeIndex >= list.length) {
+        if (!candidate) {
             progress.textContent =
-                "🎉 " + (currentCity === "all" ? "全部" : currentCity) + " 已全部完成！";
+                "目前沒有已開始且尚未抽的抽選";
             storeEl.textContent = "";
-            productEl.textContent = "共 " + list.length + " 家";
+            productEl.textContent = "之後開始的項目會在開始時間到達後自動加入";
             open.disabled = true;
             next.disabled = true;
             return;
         }
 
-        var store = list[storeIndex];
-
-        // 如果切換/載入後商品位置超出目前店家的商品數，自動歸零。
-        if (productIndex >= store.products.length) {
-            productIndex = 0;
-            saveProgress();
-        }
-
-        var product = store.products[productIndex];
-
         progress.textContent =
-            "第 " + (storeIndex + 1) + " / " + list.length + " 家";
+            "第 " + (candidate.storeIndex + 1) + " / " + list.length + " 家";
 
         storeEl.textContent =
-            store.name + "　（" + store.products.length + " 個抽選）";
+            candidate.store.name + "　（" +
+            candidate.store.products.length + " 個抽選）";
 
-        productEl.textContent = product.product;
+        productEl.textContent = candidate.product.product;
 
         open.disabled = false;
         next.disabled = false;
-        open.setAttribute("data-url", product.url);
-
-        saveProgress();
+        open.setAttribute("data-url", candidate.product.url);
     }
 
     function setCityFromTopFilter(region) {
         currentCity = region || "all";
-
-        var p = loadProgress();
-        storeIndex = p.store;
-        productIndex = p.product;
-
-        // 如果是全部/某縣市，進度以「家」為主；每家內記住抽到哪個商品。
         render();
     }
 
     function openCurrent() {
-        var url = $id("continuousDrawOpen").getAttribute("data-url");
-        if (url) window.open(url, "_blank");
+        if (!currentItem || !currentItem.product) return;
+
+        if (!hasStarted(currentItem.product)) {
+            render();
+            return;
+        }
+
+        window.open(currentItem.product.url, "_blank");
     }
 
     function completeAndOpenNext() {
-        var list = filteredStores();
-
-        if (storeIndex >= list.length) {
+        if (!currentItem || !currentItem.product) {
             render();
             return;
         }
 
-        var store = list[storeIndex];
-        var current = store.products[productIndex];
-
-        // 記錄這個實際 URL 已抽。
-        markDrawn(current.url);
-        syncDrawnRows();
-
-        // 同一家還有下一個商品：先移到下一商品。
-        if (productIndex + 1 < store.products.length) {
-            productIndex++;
-        } else {
-            // 這家全部完成，進下一家。
-            storeIndex++;
-            productIndex = 0;
-        }
-
-        saveProgress();
-
-        if (storeIndex >= list.length) {
+        // 再判斷一次，避免網頁開著期間剛好跨過開始時間。
+        if (!hasStarted(currentItem.product)) {
             render();
             return;
         }
 
-        var nextStore = list[storeIndex];
-        var nextProduct = nextStore.products[productIndex];
+        markDrawn(currentItem.product);
 
+        var nextItem = findNextItem();
+        currentItem = nextItem;
         render();
 
-        // 使用者點擊事件內直接開下一個。
-        window.open(nextProduct.url, "_blank");
+        if (nextItem && nextItem.product) {
+            // 使用者點擊事件內直接開下一個。
+            window.open(nextItem.product.url, "_blank");
+        }
     }
 
     function hookTopCityButtons() {
-        // 既有網站的縣市按鈕仍由 filterDrawRegion 控制；
-        // 這裡只讓快速抽選同步跟著它走。
         var oldFilter = window.filterDrawRegion;
 
         window.filterDrawRegion = function (region, btnElement) {
@@ -663,13 +634,7 @@
 
     function init() {
         stores = collectStores();
-
-        // 預設使用目前頁面上方的「全部」。
         currentCity = "all";
-
-        var p = loadProgress();
-        storeIndex = p.store;
-        productIndex = p.product;
 
         syncDrawnRows();
         render();
