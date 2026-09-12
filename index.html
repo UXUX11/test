@@ -553,6 +553,57 @@
         text-align:left !important;
     }
 }
+
+/* ===== 抽選模式切換 ===== */
+.draw-mode-panel {
+    max-width: 720px;
+    margin: 12px auto 16px;
+    padding: 12px 14px;
+    background: #fff;
+    border: 1px solid #dfe3e8;
+    border-radius: 12px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.05);
+}
+.draw-mode-title {
+    text-align: center;
+    font-size: 14px;
+    font-weight: 800;
+    color: #1f497d;
+    margin-bottom: 9px;
+}
+.draw-mode-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+.draw-mode-btn {
+    border: 0;
+    border-radius: 9px;
+    padding: 11px 10px;
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+    background: #e5e5e5;
+    color: #333;
+}
+.draw-mode-btn.active {
+    background: #1f497d;
+    color: #fff;
+}
+.draw-mode-btn.auto.active {
+    background: #00a83b;
+}
+.draw-mode-desc {
+    margin-top: 8px;
+    text-align: center;
+    font-size: 12px;
+    line-height: 1.55;
+    color: #666;
+}
+@media (max-width: 520px) {
+    .draw-mode-panel { margin-left: 2px; margin-right: 2px; }
+    .draw-mode-btn { font-size: 13px; padding: 10px 7px; }
+}
 </style></head>
 <body>
 <h1 id="stores-title" style="display:none;; display:none !important">LINE 門市帳號一鍵快速加好友</h1>
@@ -666,6 +717,15 @@
 }
 </style>
 <div class="draw-title-wrap"><h1 class="draw-main-title">9/11 9/12抽陀螺</h1><div class="draw-last-updated">最後更新：2026/09/12 12:46</div></div>
+
+<div class="draw-mode-panel" id="drawModePanel">
+  <div class="draw-mode-title">抽選模式</div>
+  <div class="draw-mode-buttons">
+    <button type="button" class="draw-mode-btn active" id="drawModeManual" onclick="setDrawMode('manual')">👆 手動抽選（預設）</button>
+    <button type="button" class="draw-mode-btn auto" id="drawModeAuto" onclick="setDrawMode('auto')">⚡ 自動連抽</button>
+  </div>
+  <div class="draw-mode-desc" id="drawModeDesc">手動模式：點哪一筆就只開哪一筆，不會自動跳下一個。</div>
+</div>
 
 <div class="draw-missing-box"><div class="draw-missing-title">目前缺少</div><ul class="draw-missing-list"><li>Funbox Toys－大葉高島屋（施工中）</li><li>Funbox 宏匯廣場店（施工中）</li><li>Fun box 義大2館（施工中）</li><li>Funbox 花蓮遠東店（沒有進貨）</li><li>Funbox 豐原太平洋店（沒有進貨）</li><li>來玩聚－新仁店</li><li>來玩聚鳳山店</li></ul></div><div class="draw-filter-btn-group"><button class="filter-btn active" onclick="filterDrawRegion('all', this)">全部 (71)</button><button class="filter-btn" onclick="filterDrawRegion('台北市', this)">台北市 (12)</button><button class="filter-btn" onclick="filterDrawRegion('新北市', this)">新北市 (8)</button><button class="filter-btn" onclick="filterDrawRegion('桃園市', this)">桃園市 (7)</button><button class="filter-btn" onclick="filterDrawRegion('新竹市', this)">新竹市 (3)</button><button class="filter-btn" onclick="filterDrawRegion('新竹縣', this)">新竹縣 (2)</button><button class="filter-btn" onclick="filterDrawRegion('苗栗縣', this)">苗栗縣 (1)</button><button class="filter-btn" onclick="filterDrawRegion('台中市', this)">台中市 (11)</button><button class="filter-btn" onclick="filterDrawRegion('彰化縣', this)">彰化縣 (2)</button><button class="filter-btn" onclick="filterDrawRegion('雲林縣', this)">雲林縣 (1)</button><button class="filter-btn" onclick="filterDrawRegion('嘉義市', this)">嘉義市 (3)</button><button class="filter-btn" onclick="filterDrawRegion('台南市', this)">台南市 (4)</button><button class="filter-btn" onclick="filterDrawRegion('高雄市', this)">高雄市 (11)</button><button class="filter-btn" onclick="filterDrawRegion('屏東縣', this)">屏東縣 (3)</button><button class="filter-btn" onclick="filterDrawRegion('宜蘭縣', this)">宜蘭縣 (1)</button><button class="filter-btn" onclick="filterDrawRegion('台東縣', this)">台東縣 (1)</button><button class="filter-btn" onclick="filterDrawRegion('澎湖縣', this)">澎湖縣 (1)</button></div><div class="draw-secondary-filters"><div class="product-filter-wrap"><label class="product-filter-label" for="drawProductFilter">商品篩選：</label><select class="product-filter-select" id="drawProductFilter" onchange="filterDrawProduct(this.value)"><option value="all">全部商品</option><option value="BX-00">BX-00</option><option value="BX-10">BX-10</option><option value="BX-13">BX-13</option><option value="BX-16">BX-16</option><option value="BX-18">BX-18</option><option value="BX-21">BX-21</option><option value="BX-23">BX-23</option><option value="BX-25">BX-25</option><option value="BX-26">BX-26</option><option value="BX-30">BX-30</option><option value="BX-33">BX-33</option><option value="BX-35">BX-35</option><option value="BX-37">BX-37</option><option value="BX-39">BX-39</option><option value="BX-44">BX-44</option><option value="BX-45">BX-45</option><option value="BX-46">BX-46</option><option value="BX-50">BX-50</option><option value="BX-57">BX-57</option><option value="UX-02">UX-02</option><option value="UX-06">UX-06</option><option value="UX-08">UX-08</option><option value="UX-09">UX-09</option><option value="UX-10">UX-10</option><option value="UX-11">UX-11</option><option value="UX-13">UX-13</option><option value="UX-14">UX-14</option><option value="UX-15">UX-15</option><option value="UX-19">UX-19</option><option value="UX-20">UX-20</option><option value="UX-21">UX-21</option><option value="CX-00">CX-00</option><option value="CX-02">CX-02</option><option value="CX-05">CX-05</option><option value="CX-08">CX-08</option><option value="CX-12">CX-12</option><option value="CX-13">CX-13</option><option value="CX-18">CX-18</option><option value="BXG-01">BXG-01</option><option value="BXG-04">BXG-04</option><option value="BXG-22">BXG-22</option></select></div><div class="time-filter-wrap"><div class="product-filter-label">時間篩選：</div><div class="time-filter-btn-group"><button class="filter-btn time-filter-btn active" data-time-filter="all" onclick="filterDrawTime('all', this)">全部時間</button><button class="filter-btn time-filter-btn" data-time-filter="10:00" onclick="filterDrawTime('10:00', this)">10:00</button><button class="filter-btn time-filter-btn" data-time-filter="10:30" onclick="filterDrawTime('10:30', this)">10:30</button><button class="filter-btn time-filter-btn" data-time-filter="11:00" onclick="filterDrawTime('11:00', this)">11:00</button><button class="filter-btn time-filter-btn" data-time-filter="12:00" onclick="filterDrawTime('12:00', this)">12:00</button></div></div></div>
 
@@ -948,6 +1008,44 @@
     var lowerRowSequenceMode = false;
 
     function $id(id) { return document.getElementById(id); }
+
+    // 預設一定是手動模式。只有使用者明確切到「自動連抽」才會啟用連續跳轉。
+    window.funboxDrawMode = "manual";
+
+    function updateDrawModeUi() {
+        var manualBtn = $id("drawModeManual");
+        var autoBtn = $id("drawModeAuto");
+        var desc = $id("drawModeDesc");
+        var isAuto = window.funboxDrawMode === "auto";
+
+        if (manualBtn) manualBtn.classList.toggle("active", !isAuto);
+        if (autoBtn) autoBtn.classList.toggle("active", isAuto);
+        if (desc) {
+            desc.textContent = isAuto
+                ? "自動模式：從你點的那一筆開始，抽完返回後等 2 秒，再自動找下一個沒灰底的項目。"
+                : "手動模式：點哪一筆就只開哪一筆，不會自動跳下一個。";
+        }
+    }
+
+    window.setDrawMode = function (mode) {
+        mode = mode === "auto" ? "auto" : "manual";
+
+        if (mode === "manual" && autoDrawEnabled) {
+            stopAutoDraw();
+        }
+
+        window.funboxDrawMode = mode;
+        updateDrawModeUi();
+
+        // 同頁跳轉的自動流程需要在返回 index 後知道原本是自動模式。
+        try {
+            if (mode === "auto") {
+                sessionStorage.setItem("funbox_draw_mode", "auto");
+            } else {
+                sessionStorage.removeItem("funbox_draw_mode");
+            }
+        } catch (e) {}
+    };
 
     function setAutoStatus(text) {
         var el = $id("continuousDrawAutoStatus");
@@ -1539,6 +1637,7 @@ function render() {
     // 讓下方任意一列都能直接成為自動連續抽選的起點。
     // 同頁跳轉模式：不建立新分頁，直接由目前這一頁進入 lin.ee。
     window.startAutoDrawFromRow = function (row) {
+        if (window.funboxDrawMode !== "auto") return false;
         if (!row) return false;
 
         var href = row.getAttribute("data-draw-href") || "";
@@ -1629,6 +1728,11 @@ function render() {
         } catch (e) {}
 
         if (!active || !pendingUrl) return false;
+
+        // 只有真的有尚未完成的自動連抽 session，返回時才恢復為自動模式；
+        // 平常重新開頁面仍維持「手動抽選」預設。
+        window.funboxDrawMode = "auto";
+        updateDrawModeUi();
 
         var completedItem = findItemByUrl(pendingUrl);
         if (!completedItem || !completedItem.product) {
@@ -1744,6 +1848,11 @@ function render() {
         hookTopCityButtons();
         hookTopProductFilter();
         hookTopTimeFilter();
+
+        // 一般進入頁面一律預設手動；如果稍後偵測到有效的自動連抽 session，
+        // resumeSamePageAutoDrawIfNeeded() 會再切回自動模式。
+        window.funboxDrawMode = "manual";
+        updateDrawModeUi();
 
         // 自動模式啟動時顯示固定在右下角的停止鍵；
         // 從很下面的店家開始時，不必再捲回上方才能停止。
@@ -2008,13 +2117,20 @@ function render() {
     const id = row.getAttribute('data-draw-id');
     if (!href || !id) return;
 
-    // 新模式：直接點下面任意一筆，就從這筆開始自動往下跳。
+    // 預設手動模式：只開使用者點的這一筆，不啟動任何自動下一個。
+    if (window.funboxDrawMode !== 'auto') {
+        window.markDrawVisited(id);
+        window.location.href = href;
+        return;
+    }
+
+    // 自動連抽模式：從使用者點的這一筆開始，返回後自動找下一個未灰項目。
     if (typeof window.startAutoDrawFromRow === 'function') {
         const started = window.startAutoDrawFromRow(row);
         if (started) return;
     }
 
-    // 保底：若自動模式尚未初始化，也維持同頁開啟，不建立新分頁。
+    // 保底：若自動模式尚未初始化，至少仍能正常開啟該筆。
     window.markDrawVisited(id);
     window.location.href = href;
 };
