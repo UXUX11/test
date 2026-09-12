@@ -911,6 +911,38 @@
     var autoNextTimer = null;
     var autoCountdownTimer = null;
 
+    // 固定抽獎視窗模式：所有抽獎連結都盡量重用同一個 named window。
+    // 若 LINE / 手機瀏覽器把該視窗真的關閉，下一次仍會嘗試重新開啟；
+    // 若被 popup 規則阻擋，再退回原頁直接跳轉。
+    var DRAW_WINDOW_NAME = "funboxDrawWindow";
+    var drawWindowRef = null;
+
+    function openOrReuseDrawWindow(url) {
+        if (!url) return null;
+
+        // 先重用目前還活著的視窗，這種情況通常不需要再建立 popup。
+        try {
+            if (drawWindowRef && !drawWindowRef.closed) {
+                drawWindowRef.location.href = url;
+                try { drawWindowRef.focus(); } catch (ignore) {}
+                return drawWindowRef;
+            }
+        } catch (e) {
+            // 跨來源頁面可能限制部分屬性，改走 named window。
+        }
+
+        // 同一個 name 會優先重用既有 browsing context。
+        try {
+            drawWindowRef = window.open(url, DRAW_WINDOW_NAME);
+            if (drawWindowRef) {
+                try { drawWindowRef.focus(); } catch (ignore) {}
+                return drawWindowRef;
+            }
+        } catch (e) {}
+
+        return null;
+    }
+
     // 從下方清單直接點任意一筆時，改成「從該筆之後」依目前畫面順序往下抽，
     // 不會又跳回整份清單最上面。
     var lowerRowSequenceMode = false;
@@ -954,10 +986,13 @@
         try {
             sessionStorage.removeItem("funbox_auto_draw_active");
             sessionStorage.removeItem("funbox_auto_draw_pending_url");
+            sessionStorage.removeItem("funbox_auto_draw_lower_sequence");
         } catch (e) {}
 
+        var floatingStop = $id("continuousDrawFloatingStop");
+        if (floatingStop) floatingStop.textContent = "⏹ 停止自動跳轉";
         updateAutoControls();
-        setAutoStatus("已停止；目前進度已保留，可再按開始繼續");
+        setAutoStatus("已停止；目前進度已保留，可再點下面任意一筆繼續");
     }
 
 
@@ -1361,19 +1396,18 @@ function render() {
     function openNextAutomatically(item) {
         if (!item || !item.product || !item.product.url) return;
 
+        lowerRowSequenceMode = true;
         armAutoDraw(item);
-        setAutoStatus("正在開啟下一個抽獎");
-
-        // 回到原頁時先嘗試照原本方式開新頁；若瀏覽器判定這次沒有
-        // 使用者手勢而擋掉 popup，再退回直接導向，避免流程卡住。
-        var nextWindow = null;
         try {
-            nextWindow = window.open(item.product.url, "_blank");
+            sessionStorage.setItem("funbox_auto_draw_lower_sequence", "1");
         } catch (e) {}
 
-        if (!nextWindow) {
-            window.location.href = item.product.url;
-        }
+        setAutoStatus("正在用同一頁開啟下一個抽獎");
+
+        // 同頁跳轉模式：不建立新分頁 / 新視窗。
+        // 離開 index 前已把目前待抽網址存進 sessionStorage；
+        // 抽獎關閉 / 返回 index 後，會從 sessionStorage 恢復並繼續。
+        window.location.href = item.product.url;
     }
 
 
@@ -1383,10 +1417,18 @@ function render() {
         var remaining = Math.ceil(AUTO_NEXT_DELAY_MS / 1000);
         setAutoStatus("已完成；" + remaining + " 秒後開啟下一個（可按停止）");
 
+        var floatingStop = $id("continuousDrawFloatingStop");
+        if (floatingStop) {
+            floatingStop.textContent = "⏹ 停止（" + remaining + "秒）";
+            floatingStop.style.display = "block";
+        }
+
         autoCountdownTimer = window.setInterval(function () {
             remaining -= 1;
             if (remaining > 0 && autoDrawEnabled) {
                 setAutoStatus("已完成；" + remaining + " 秒後開啟下一個（可按停止）");
+                var btn = $id("continuousDrawFloatingStop");
+                if (btn) btn.textContent = "⏹ 停止（" + remaining + "秒）";
             }
         }, 1000);
 
@@ -1396,6 +1438,8 @@ function render() {
                 returnHandling = false;
                 return;
             }
+            var btn = $id("continuousDrawFloatingStop");
+            if (btn) btn.textContent = "⏹ 停止自動跳轉";
             returnHandling = false;
             openNextAutomatically(item);
         }, AUTO_NEXT_DELAY_MS);
@@ -1453,7 +1497,7 @@ function render() {
         }
 
         armAutoDraw(currentItem);
-        window.open(currentItem.product.url, "_blank");
+        window.location.href = currentItem.product.url;
     }
 
     function completeAndOpenNext() {
@@ -1483,7 +1527,7 @@ function render() {
         if (nextItem && nextItem.product) {
             // 手動備援按鈕仍由使用者手勢開新頁；同時重新啟用自動回來跳下一個。
             armAutoDraw(nextItem);
-            window.open(nextItem.product.url, "_blank");
+            window.location.href = nextItem.product.url;
         } else {
             autoDrawEnabled = false;
             pendingAutoItem = null;
@@ -1493,7 +1537,7 @@ function render() {
     }
 
     // 讓下方任意一列都能直接成為自動連續抽選的起點。
-    // 第一次開啟仍由使用者這次點擊觸發，因此不會被瀏覽器當成無手勢 popup。
+    // 同頁跳轉模式：不建立新分頁，直接由目前這一頁進入 lin.ee。
     window.startAutoDrawFromRow = function (row) {
         if (!row) return false;
 
@@ -1544,23 +1588,95 @@ function render() {
         lowerRowSequenceMode = true;
         currentItem = found;
         armAutoDraw(found);
-        setAutoStatus("已從下方清單開始；抽完關閉後，2 秒後自動開下一筆");
-
-        var w = null;
         try {
-            // 這裡本身就是使用者點擊事件，直接開新頁最穩；
-            // 不使用 noopener feature，避免部分手機瀏覽器回傳 null 後誤判成開啟失敗。
-            w = window.open(found.product.url, "_blank");
-            if (w) {
-                try { w.opener = null; } catch (ignore) {}
-            }
+            sessionStorage.setItem("funbox_auto_draw_lower_sequence", "1");
         } catch (e) {}
+        setAutoStatus("同頁跳轉模式；抽完關閉 / 返回後有 2 秒可停止");
 
-        if (!w) {
-            window.location.href = found.product.url;
-        }
+        // 不開新分頁：目前頁面直接進入抽獎。
+        window.location.href = found.product.url;
         return true;
     };
+
+    function findItemByUrl(url) {
+        if (!url) return null;
+        for (var s = 0; s < stores.length; s++) {
+            var store = stores[s];
+            for (var p = 0; p < store.products.length; p++) {
+                var product = store.products[p];
+                if (product.url === url) {
+                    return {
+                        store: store,
+                        product: product,
+                        storeIndex: s,
+                        productIndex: p
+                    };
+                }
+            }
+        }
+        return null;
+    }
+
+    // 同頁模式返回 index 時，原本的 JavaScript 已被重新載入，
+    // 因此用 sessionStorage 找回「剛才正在抽的那一筆」。
+    // 找回後才把它標成完成，再提供 2 秒停止時間。
+    function resumeSamePageAutoDrawIfNeeded() {
+        var active = false;
+        var pendingUrl = "";
+        try {
+            active = sessionStorage.getItem("funbox_auto_draw_active") === "1";
+            pendingUrl = sessionStorage.getItem("funbox_auto_draw_pending_url") || "";
+        } catch (e) {}
+
+        if (!active || !pendingUrl) return false;
+
+        var completedItem = findItemByUrl(pendingUrl);
+        if (!completedItem || !completedItem.product) {
+            stopAutoDraw();
+            return false;
+        }
+
+        autoDrawEnabled = true;
+        lowerRowSequenceMode = true;
+        pendingAutoItem = null;
+        drawPageWasLeft = false;
+        returnHandling = true;
+        updateAutoControls();
+
+        markDrawn(completedItem.product);
+        syncDrawnRows();
+        if (typeof window.restoreDrawVisited === "function") {
+            window.restoreDrawVisited();
+        }
+
+        var nextItem = findNextItemAfter(completedItem);
+        currentItem = nextItem;
+        render();
+
+        if (!nextItem || !nextItem.product) {
+            clearAutoNextTimers();
+            autoDrawEnabled = false;
+            lowerRowSequenceMode = false;
+            returnHandling = false;
+            try {
+                sessionStorage.removeItem("funbox_auto_draw_active");
+                sessionStorage.removeItem("funbox_auto_draw_pending_url");
+                sessionStorage.removeItem("funbox_auto_draw_lower_sequence");
+            } catch (e) {}
+            updateAutoControls();
+            setAutoStatus("已到目前清單最後一筆，已停止自動跳轉");
+            return true;
+        }
+
+        // 先清掉上一筆 pending；2 秒到時 openNextAutomatically 會寫入下一筆。
+        try {
+            sessionStorage.removeItem("funbox_auto_draw_pending_url");
+        } catch (e) {}
+
+        returnHandling = false;
+        scheduleNextAutomatically(nextItem);
+        return true;
+    }
 
     function hookTopCityButtons() {
         var oldFilter = window.filterDrawRegion;
@@ -1665,6 +1781,11 @@ function render() {
         if (topStop) topStop.onclick = stopAutoDraw;
         updateAutoControls();
 
+        // 如果剛從同頁抽獎返回，這裡會恢復上一筆並開始 2 秒倒數。
+        // 成功恢復後不需要依賴 focus / visibilitychange 才能續抽。
+        resumeSamePageAutoDrawIfNeeded();
+
+        // 舊式事件偵測仍保留作相容性備援。
         // 抽獎頁打開時原頁通常會 hidden / blur；抽完關閉後則 visible / focus。
         // 兩組事件都監聽，兼容 LINE 內建瀏覽器與一般手機瀏覽器。
         document.addEventListener("visibilitychange", function () {
@@ -1893,9 +2014,9 @@ function render() {
         if (started) return;
     }
 
-    // 保底：若自動模式尚未初始化，仍保留原本單次開啟行為。
+    // 保底：若自動模式尚未初始化，也維持同頁開啟，不建立新分頁。
     window.markDrawVisited(id);
-    window.open(href, '_blank', 'noopener');
+    window.location.href = href;
 };
 
     window.handleDrawRowKey = function(event, row) {
