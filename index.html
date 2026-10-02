@@ -799,12 +799,12 @@
   color: #666 !important;
 }
 </style>
-<div class="draw-title-wrap"><h1 class="draw-main-title">10/02 10/03 抽選</h1><div class="draw-last-updated">最後更新：2026/10/03 06:19（固定1秒自動連抽 V2）</div></div>
+<div class="draw-title-wrap"><h1 class="draw-main-title">10/02 10/03 抽選</h1><div class="draw-last-updated">最後更新：2026/10/03 06:33（手機 LINE 內建瀏覽器 5 秒測試版）</div></div>
 <div class="draw-mode-panel" id="drawModePanel">
 <div class="draw-mode-title">抽選模式</div>
 <div class="draw-mode-buttons">
 <button class="draw-mode-btn active" id="drawModeManual" onclick="setDrawMode('manual')" type="button">👆 手動抽選（預設）</button>
-<button class="draw-mode-btn auto" id="drawModeAuto" onclick="setDrawMode('auto')" type="button">⚡ 自動連抽</button>
+<button class="draw-mode-btn auto" id="drawModeAuto" onclick="setDrawMode('auto')" type="button">⚡ 自動連抽（5秒測試）</button>
 </div>
 <div class="draw-mode-desc" id="drawModeDesc">手動模式：點哪一筆就只開哪一筆，不會自動跳下一個。</div>
 </div>
@@ -1121,7 +1121,7 @@
         if (autoBtn) autoBtn.classList.toggle("active", isAuto);
         if (desc) {
             desc.textContent = isAuto
-                ? "自動模式：從你點的那一筆開始，抽完返回後等 2 秒，再自動找下一個沒灰底的項目。"
+                ? "手機測試模式：點第一筆後，開啟 LINE 抽獎頁；不判斷抽獎結果，5 秒後直接嘗試切到下一筆。"
                 : "手動模式：點哪一筆就只開哪一筆，不會自動跳下一個。";
         }
     }
@@ -2514,14 +2514,127 @@ function render() {
 </script>
 <script>
 (function(){
-  var timer=null, win=null, rows=[], i=-1, running=false;
-  function status(s){var e=document.getElementById("continuousDrawAutoStatus");if(e)e.textContent="自動連抽："+s;}
-  function stop(){running=false;if(timer){clearTimeout(timer);timer=null;}rows=[];i=-1;}
-  window.stopFixedOneSecondAutoDraw=stop;
-  function visible(){return Array.from(document.querySelectorAll("#page-draws .draw-item[data-draw-href]")).filter(function(r){return r.offsetParent!==null&&r.style.display!=="none";});}
-  function open(url){try{if(win&&!win.closed){win.location.href=url;return true;}}catch(e){} try{win=window.open(url,"funboxDrawWindow");return !!win;}catch(e){return false;}}
-  function next(){if(!running)return; i++; if(i>=rows.length){status("已到最後一筆，已停止");stop();return;} var row=rows[i],url=row.getAttribute("data-draw-href")||""; if(!url){timer=setTimeout(next,1000);return;} row.classList.add("quick-drawn"); if(!open(url)){status("LINE 視窗無法切換，已停止");stop();return;} status("第 "+(i+1)+" / "+rows.length+" 筆；1 秒後下一筆"); timer=setTimeout(next,1000);}
-  window.startFixedOneSecondAutoDraw=function(startRow){if(!startRow)return false; rows=visible(); i=rows.indexOf(startRow); if(i<0){rows=Array.from(document.querySelectorAll("#page-draws .draw-item[data-draw-href]"));i=rows.indexOf(startRow);} if(i<0){status("找不到你點的商品");return false;} stop(); rows=rows.slice(i); i=-1; running=true; status("準備開啟第 1 筆"); next(); return true;};
+  // === 手機 LINE 內建瀏覽器測試：開第一筆後，5 秒後直接切下一筆 ===
+  // 目的不是判斷「有沒有抽完」，而是單純驗證：
+  // 原本抽籤 HTML 放到背景後，JavaScript 的 timer 能不能繼續執行。
+  var timer = null;
+  var win = null;
+  var rows = [];
+  var index = -1;
+  var running = false;
+  var DELAY = 5000;
+
+  function status(s){
+    var e = document.getElementById("continuousDrawAutoStatus");
+    if (e) e.textContent = "手機測試：" + s;
+  }
+
+  function clearTimer(){
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  }
+
+  function stop(){
+    running = false;
+    clearTimer();
+  }
+
+  window.stopFixedOneSecondAutoDraw = stop;
+
+  function visible(){
+    return Array.from(document.querySelectorAll("#page-draws .draw-item[data-draw-href]")).filter(function(r){
+      return r.offsetParent !== null && r.style.display !== "none";
+    });
+  }
+
+  function openUrl(url){
+    if (!url) return false;
+
+    try {
+      if (win && !win.closed) {
+        win.location.href = url;
+        try { win.focus(); } catch (ignore) {}
+        return true;
+      }
+    } catch (e) {}
+
+    try {
+      // 這一次一定要在第一次點擊手勢下建立 named window。
+      win = window.open(url, "funboxDrawMobileTest");
+      if (win) {
+        try { win.focus(); } catch (ignore) {}
+        return true;
+      }
+    } catch (e) {}
+
+    return false;
+  }
+
+  function next(){
+    if (!running) return;
+
+    index += 1;
+
+    if (index >= rows.length) {
+      status("已到最後一筆，測試停止");
+      stop();
+      return;
+    }
+
+    var row = rows[index];
+    var url = row.getAttribute("data-draw-href") || "";
+    if (!url) {
+      timer = setTimeout(next, DELAY);
+      return;
+    }
+
+    row.classList.add("quick-drawn");
+
+    if (!openUrl(url)) {
+      status("LINE 視窗無法開啟／切換，測試停止");
+      stop();
+      return;
+    }
+
+    var currentNo = index + 1;
+    var nextNo = currentNo + 1;
+
+    if (nextNo <= rows.length) {
+      status("第 " + currentNo + " / " + rows.length + " 筆已開啟；5 秒後嘗試第 " + nextNo + " 筆");
+      timer = setTimeout(next, DELAY);
+    } else {
+      status("第 " + currentNo + " / " + rows.length + " 筆已開啟；5 秒後測試結束");
+      timer = setTimeout(next, DELAY);
+    }
+  }
+
+  window.startFixedOneSecondAutoDraw = function(startRow){
+    if (!startRow) return false;
+
+    var all = visible();
+    var startIndex = all.indexOf(startRow);
+
+    if (startIndex < 0) {
+      all = Array.from(document.querySelectorAll("#page-draws .draw-item[data-draw-href]"));
+      startIndex = all.indexOf(startRow);
+    }
+
+    if (startIndex < 0) {
+      status("找不到你點的商品");
+      return false;
+    }
+
+    stop();
+    rows = all.slice(startIndex);
+    index = -1;
+    running = true;
+
+    status("已啟動；準備開啟第 1 筆");
+    next();
+    return true;
+  };
 })();
 </script>
 <script>
