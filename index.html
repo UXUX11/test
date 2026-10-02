@@ -799,7 +799,7 @@
   color: #666 !important;
 }
 </style>
-<div class="draw-title-wrap"><h1 class="draw-main-title">10/02 10/03 抽選</h1><div class="draw-last-updated">最後更新：2026/10/03 00:00（固定1秒自動連抽測試版）</div></div>
+<div class="draw-title-wrap"><h1 class="draw-main-title">10/02 10/03 抽選</h1><div class="draw-last-updated">最後更新：2026/10/03 06:19（固定1秒自動連抽 V2）</div></div>
 <div class="draw-mode-panel" id="drawModePanel">
 <div class="draw-mode-title">抽選模式</div>
 <div class="draw-mode-buttons">
@@ -2514,6 +2514,18 @@ function render() {
 </script>
 <script>
 (function(){
+  var timer=null, win=null, rows=[], i=-1, running=false;
+  function status(s){var e=document.getElementById("continuousDrawAutoStatus");if(e)e.textContent="自動連抽："+s;}
+  function stop(){running=false;if(timer){clearTimeout(timer);timer=null;}rows=[];i=-1;}
+  window.stopFixedOneSecondAutoDraw=stop;
+  function visible(){return Array.from(document.querySelectorAll("#page-draws .draw-item[data-draw-href]")).filter(function(r){return r.offsetParent!==null&&r.style.display!=="none";});}
+  function open(url){try{if(win&&!win.closed){win.location.href=url;return true;}}catch(e){} try{win=window.open(url,"funboxDrawWindow");return !!win;}catch(e){return false;}}
+  function next(){if(!running)return; i++; if(i>=rows.length){status("已到最後一筆，已停止");stop();return;} var row=rows[i],url=row.getAttribute("data-draw-href")||""; if(!url){timer=setTimeout(next,1000);return;} row.classList.add("quick-drawn"); if(!open(url)){status("LINE 視窗無法切換，已停止");stop();return;} status("第 "+(i+1)+" / "+rows.length+" 筆；1 秒後下一筆"); timer=setTimeout(next,1000);}
+  window.startFixedOneSecondAutoDraw=function(startRow){if(!startRow)return false; rows=visible(); i=rows.indexOf(startRow); if(i<0){rows=Array.from(document.querySelectorAll("#page-draws .draw-item[data-draw-href]"));i=rows.indexOf(startRow);} if(i<0){status("找不到你點的商品");return false;} stop(); rows=rows.slice(i); i=-1; running=true; status("準備開啟第 1 筆"); next(); return true;};
+})();
+</script>
+<script>
+(function(){
   // 從本機 HTML 開啟 LINE lin.ee 時，改用新分頁，避免 file:// 直接導向外部網址被瀏覽器封鎖。
   window.openFunboxDrawLink = function(href) {
     if (!href) return false;
@@ -2531,10 +2543,7 @@ function render() {
       window.openFunboxDrawLink(href);
       return;
     }
-    if (typeof window.startAutoDrawFromRow === 'function') {
-      const started = window.startAutoDrawFromRow(row);
-      if (started) return;
-    }
+    if (typeof window.startFixedOneSecondAutoDraw === 'function' && window.startFixedOneSecondAutoDraw(row)) return;
     if (typeof window.markDrawVisited === 'function') window.markDrawVisited(id);
     window.openFunboxDrawLink(href);
   };
